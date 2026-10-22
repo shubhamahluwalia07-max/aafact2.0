@@ -1,0 +1,9 @@
+flask
+numpy
+scipy
+trimesh[easy]
+manifold3d
+rtree
+networkx
+pandas
+openpyxl

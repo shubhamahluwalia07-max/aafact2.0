@@ -1,0 +1,32 @@
+# Python virtual environment
+venv/
+env/
+.env
+
+# MATLAB Runtime local installer and archive (Large binaries)
+MATLAB_Runtime_*/
+*.zip
+*.tar.gz
+*.iso
+
+# Python cache & build
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.pytest_cache/
+
+# User uploads and runtime outputs (preserve folder structure via .gitkeep)
+uploads/*
+!uploads/.gitkeep
+outputs/aligned/*
+!outputs/aligned/.gitkeep
+outputs/cut_segments/*
+!outputs/cut_segments/.gitkeep
+
+# IDE & OS files
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
+*.log

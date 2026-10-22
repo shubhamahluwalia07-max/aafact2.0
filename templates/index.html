@@ -1,0 +1,396 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>AAFACT 2.0 - Bone Alignment & Corticotomy Planning System</title>
+  <link rel="stylesheet" href="/static/css/style.css">
+  
+  <!-- Three.js and Loaders (Local self-contained offline) -->
+  <script src="/static/libs/three.min.js"></script>
+  <script src="/static/libs/OrbitControls.js"></script>
+  <script src="/static/libs/STLLoader.js"></script>
+</head>
+<body>
+
+  <!-- Top App Navigation Bar -->
+  <header class="app-header">
+    <div class="brand-section">
+      <div class="brand-logo">A2</div>
+      <div>
+        <div class="brand-title">
+          AAFACT 2.0
+          <span class="version-pill">Orthopedic Biomechanics</span>
+        </div>
+      </div>
+    </div>
+
+    <div class="header-status-group">
+      <div class="status-badge" title="Checks registry for MATLAB Runtime R2023a (v9.14)">
+        <div id="matlab-status-dot" class="status-dot"></div>
+        <span id="matlab-status-text">Checking Runtime...</span>
+      </div>
+
+      <div class="status-badge">
+        <span style="color: var(--text-dim);">Active Bone:</span>
+        <span id="active-bone-badge" style="color: #38bdf8; font-weight: 700;">None Selected</span>
+      </div>
+    </div>
+  </header>
+
+  <!-- App Main Content Area -->
+  <main class="app-container">
+
+    <!-- Left Control Sidebar -->
+    <aside class="sidebar-panel">
+      <!-- Step Navigation Stepper -->
+      <nav class="step-nav">
+        <div id="tab-btn-1" class="step-tab active">
+          <span class="tab-badge">1</span>
+          <span>Import & Align</span>
+        </div>
+        <div id="tab-btn-2" class="step-tab disabled">
+          <span class="tab-badge">2</span>
+          <span>Corticotomy</span>
+        </div>
+        <div id="tab-btn-3" class="step-tab disabled">
+          <span class="tab-badge">3</span>
+          <span>Export & Review</span>
+        </div>
+      </nav>
+
+      <!-- Panel 1: Module 1 - Import & Alignment -->
+      <section id="tab-content-1" class="panel-content active">
+        <!-- STL Upload Dropzone -->
+        <div class="ui-card">
+          <div class="card-title">
+            <span>STL Import (Batch / Single)</span>
+            <span style="font-size: 10px; color: var(--text-dim);">Format: Name_Lat_Anatomy.stl</span>
+          </div>
+
+          <div id="dropzone" class="dropzone">
+            <div class="dropzone-icon">⬡</div>
+            <div class="dropzone-text">Drag & drop bone STL files here</div>
+            <div class="dropzone-subtext">or click to browse your computer (.stl)</div>
+            <input type="file" id="file-input" accept=".stl" multiple style="display: none;">
+          </div>
+
+          <!-- Quick Load Clinical Samples -->
+          <div>
+            <div style="font-size: 11px; font-weight: 600; color: var(--text-muted); margin-bottom: 6px;">
+              Quick Load Clinical Test Cases:
+            </div>
+            <div class="sample-bones-row">
+              <button id="sample-ashok-btn" class="sample-bone-btn" type="button">
+                <span>Ashok_Right_Tibia</span>
+                <span class="tag">Right Tibia • 375mm</span>
+              </button>
+              <button id="sample-balvir-btn" class="sample-bone-btn" type="button">
+                <span>Balvir_Left_Tibia</span>
+                <span class="tag">Left Tibia • 360mm</span>
+              </button>
+            </div>
+          </div>
+        </div>
+
+        <!-- Automatic Filename Parser & Override Card -->
+        <div id="metadata-card" class="ui-card" style="display: none;">
+          <div class="card-title">
+            <span>Parsed Bone Metadata</span>
+            <span id="standard-filename-badge" class="version-pill">Parsing...</span>
+          </div>
+
+          <div class="parsed-meta-grid">
+            <div class="form-group">
+              <label class="form-label" for="input-patient-name">Patient Name:</label>
+              <input type="text" id="input-patient-name" class="form-input" placeholder="Patient Name">
+            </div>
+
+            <div class="form-group">
+              <label class="form-label" for="select-anatomy">Anatomy:</label>
+              <select id="select-anatomy" class="form-select">
+                <option value="Tibia">Tibia</option>
+                <option value="Fibula">Fibula</option>
+                <option value="Femur">Femur</option>
+                <option value="Talus">Talus</option>
+                <option value="Patella">Patella</option>
+              </select>
+            </div>
+          </div>
+
+          <div class="form-group">
+            <label class="form-label">Laterality:</label>
+            <div class="lat-selector">
+              <div id="lat-option-right" class="lat-option active">Right</div>
+              <div id="lat-option-left" class="lat-option">Left</div>
+            </div>
+          </div>
+
+          <button id="btn-run-alignment" class="btn-primary" type="button" disabled>
+            Execute AAFACT Alignment & Plateau Z-Origin
+          </button>
+        </div>
+
+        <!-- Alignment Results Card -->
+        <div id="alignment-card" class="ui-card" style="display: none;">
+          <div class="card-title">
+            <span>Alignment & Registration Verified</span>
+            <span class="version-pill" style="color: #34d399; border-color: rgba(52, 211, 153, 0.3)">Z=0 Normalized</span>
+          </div>
+
+          <div class="metric-row">
+            <span class="metric-label">Total Tibial Length (TTL):</span>
+            <span id="readout-ttl" class="metric-val highlight-cyan">-- mm</span>
+          </div>
+          <div class="metric-row">
+            <span class="metric-label">Proximal Joint Line (Plateau):</span>
+            <span id="readout-z-plateau" class="metric-val highlight-emerald">Z = 0.0 mm (0%)</span>
+          </div>
+          <div class="metric-row">
+            <span class="metric-label">Distal Joint Line (Pilon):</span>
+            <span id="readout-z-distal" class="metric-val highlight-cyan">Z = -TTL mm (100%)</span>
+          </div>
+          <div class="metric-row">
+            <span class="metric-label">Bone Volume:</span>
+            <span id="readout-volume" class="metric-val">-- cm³</span>
+          </div>
+
+          <div style="display: flex; gap: 8px; margin-top: 6px;">
+            <a id="btn-download-aligned" class="btn-secondary" style="flex: 1; text-align: center; text-decoration: none;" download>
+              Download Aligned STL
+            </a>
+            <button id="btn-proceed-module2" class="btn-primary" style="flex: 1.2;" type="button">
+              Proceed to Corticotomy ➔
+            </button>
+          </div>
+        </div>
+      </section>
+
+      <!-- Panel 2: Module 2 - Corticotomy & Defect Slicing -->
+      <section id="tab-content-2" class="panel-content">
+        <!-- Clinical Presets Card -->
+        <div class="ui-card">
+          <div class="card-title">
+            <span>Clinical Presets</span>
+            <span style="font-size: 10px; color: var(--text-dim);">One-Click Configuration</span>
+          </div>
+          <div class="presets-grid">
+            <div id="preset-a-btn" class="preset-card active">
+              <span class="preset-title">Preset A: Standard 25%</span>
+              <span class="preset-desc">Defect: 20% to 45% (25% TTL)<br>Corticotomy: 75% TTL (Distal)</span>
+            </div>
+            <div id="preset-b-btn" class="preset-card">
+              <span class="preset-title">Preset B: Mid-Shaft 20%</span>
+              <span class="preset-desc">Defect: 40% to 60% (Centered 20%)<br>Corticotomy: 20% TTL (Proximal)</span>
+            </div>
+          </div>
+        </div>
+
+        <!-- Cutting Configuration Card -->
+        <div class="ui-card">
+          <div class="card-title">
+            <span>Cutting Configuration (Linked % & mm)</span>
+          </div>
+
+          <div class="form-group" style="margin-bottom: 6px;">
+            <div style="display: flex; justify-content: space-between; align-items: center;">
+              <label class="form-label" for="input-ttl-module2">Total Tibial Length (TTL):</label>
+              <div style="display: flex; align-items: center; gap: 4px;">
+                <input type="number" id="input-ttl-module2" class="slider-val-input" style="width: 70px;" step="0.1">
+                <span style="font-size: 11px; color: var(--text-muted);">mm (100%)</span>
+              </div>
+            </div>
+          </div>
+
+          <!-- Defect Start -->
+          <div class="slider-control-group">
+            <div class="slider-header">
+              <span class="slider-title">
+                <span class="plane-dot defect"></span> Defect Start (Proximal Cut)
+              </span>
+              <div class="slider-readouts">
+                <input type="number" id="input-defect-start-pct" class="slider-val-input" min="1" max="95" step="0.5">
+                <span style="font-size: 11px; color: var(--text-muted); align-self: center;">%</span>
+                <input type="number" id="input-defect-start-mm" class="slider-val-input" step="0.1">
+                <span style="font-size: 11px; color: var(--text-muted); align-self: center;">mm</span>
+              </div>
+            </div>
+            <input type="range" id="slider-defect-start" class="range-slider" min="1" max="85" step="0.5" value="20">
+          </div>
+
+          <!-- Defect Length -->
+          <div class="slider-control-group">
+            <div class="slider-header">
+              <span class="slider-title">
+                <span class="plane-dot defect"></span> Defect Length (Size)
+              </span>
+              <div class="slider-readouts">
+                <input type="number" id="input-defect-length-pct" class="slider-val-input" min="1" max="60" step="0.5">
+                <span style="font-size: 11px; color: var(--text-muted); align-self: center;">%</span>
+                <input type="number" id="input-defect-length-mm" class="slider-val-input" step="0.1">
+                <span style="font-size: 11px; color: var(--text-muted); align-self: center;">mm</span>
+              </div>
+            </div>
+            <input type="range" id="slider-defect-length" class="range-slider" min="1" max="60" step="0.5" value="25">
+          </div>
+
+          <!-- Defect End Readout -->
+          <div class="metric-row" style="background: rgba(239, 68, 68, 0.08); padding: 7px 10px; border-radius: 4px;">
+            <span class="metric-label" style="color: #f87171;">Defect End (Distal Cut):</span>
+            <span class="metric-val highlight-rose">
+              <span id="readout-defect-end-pct">45.0%</span> (<span id="readout-defect-end-mm">168.8 mm</span>)
+            </span>
+          </div>
+
+          <!-- Corticotomy Location -->
+          <div class="slider-control-group">
+            <div class="slider-header">
+              <span class="slider-title">
+                <span class="plane-dot corticotomy"></span> Corticotomy Cut Location
+              </span>
+              <div class="slider-readouts">
+                <input type="number" id="input-corticotomy-pct" class="slider-val-input" min="1" max="99" step="0.5">
+                <span style="font-size: 11px; color: var(--text-muted); align-self: center;">%</span>
+                <input type="number" id="input-corticotomy-mm" class="slider-val-input" step="0.1">
+                <span style="font-size: 11px; color: var(--text-muted); align-self: center;">mm</span>
+              </div>
+            </div>
+            <input type="range" id="slider-corticotomy" class="range-slider" min="1" max="98" step="0.5" value="75">
+          </div>
+
+          <!-- Optional Saw Kerf Width -->
+          <div class="metric-row">
+            <span class="metric-label">Saw Kerf Width (Thickness):</span>
+            <div style="display: flex; align-items: center; gap: 4px;">
+              <input type="number" id="input-saw-kerf-mm" class="slider-val-input" min="0" max="5" step="0.1" value="0.0">
+              <span style="font-size: 11px; color: var(--text-muted);">mm</span>
+            </div>
+          </div>
+        </div>
+
+        <!-- Dynamic Plane Ordering Schematic -->
+        <div class="ui-card">
+          <div class="card-title">
+            <span>Dynamic Plane Sequence</span>
+            <span id="plane-ordering-badge" style="font-size: 11px; font-weight: 700; color: #38bdf8;">Evaluating...</span>
+          </div>
+          <div class="plane-schematic-bar">
+            <div id="schematic-proximal" class="schematic-segment schematic-proximal" style="width: 20%;">Prox</div>
+            <div id="schematic-defect" class="schematic-segment schematic-defect" style="width: 25%;">Defect</div>
+            <div id="schematic-transport" class="schematic-segment schematic-transport" style="width: 30%;">Transport</div>
+            <div id="schematic-distal" class="schematic-segment schematic-distal" style="width: 25%;">Distal</div>
+          </div>
+          <div style="display: flex; justify-content: space-between; font-size: 10px; color: var(--text-dim);">
+            <span>0% (Z=0 Plateau)</span>
+            <span>50% Midshaft</span>
+            <span>100% (Z=-TTL Distal)</span>
+          </div>
+
+          <button id="btn-run-slicing" class="btn-primary" style="margin-top: 8px;" type="button">
+            Execute Watertight Corticotomy Slicing
+          </button>
+        </div>
+      </section>
+
+      <!-- Panel 3: Module 3 - Analysis & Exports -->
+      <section id="tab-content-3" class="panel-content">
+        <div class="ui-card" style="background: rgba(16, 185, 129, 0.08); border-color: rgba(16, 185, 129, 0.3);">
+          <div class="card-title" style="color: #34d399;">
+            <span>Slicing Complete & Watertight</span>
+            <span class="version-pill" style="color: #34d399; border-color: #34d39955">3D Printable</span>
+          </div>
+          <p style="font-size: 12px; color: var(--text-muted);">
+            Three isolated solid segments exported to <code>outputs/cut_segments/</code>. All surfaces capped into watertight manifold solids.
+          </p>
+          <div style="display: flex; gap: 8px; margin-top: 4px;">
+            <a id="btn-download-zip" class="btn-primary" style="flex: 1; text-align: center; text-decoration: none;" download>
+              Download All (ZIP Archive)
+            </a>
+          </div>
+        </div>
+
+        <!-- Segment Metrics Cards -->
+        <div id="segment-cards-container" style="display: flex; flex-direction: column; gap: 12px;"></div>
+
+        <button id="btn-start-new-case" class="btn-secondary" style="margin-top: 6px;" type="button">
+          ↺ Plan Another Bone
+        </button>
+      </section>
+    </aside>
+
+    <!-- Right 3D Viewport Panel -->
+    <section class="viewport-panel">
+      <!-- Floating Viewport Toolbar -->
+      <div class="viewport-toolbar">
+        <div class="view-btn-group">
+          <button id="view-front-btn" class="view-btn" type="button" title="Anterior / Coronal (AP)">AP Front</button>
+          <button id="view-side-btn" class="view-btn" type="button" title="Lateral / Sagittal">Lateral</button>
+          <button id="view-top-btn" class="view-btn" type="button" title="Proximal Plateau View">Axial Top</button>
+          <button id="view-iso-btn" class="view-btn" type="button" title="Isometric Perspective">Isometric</button>
+        </div>
+
+        <div class="viewport-layers">
+          <label class="layer-toggle">
+            <input type="checkbox" id="toggle-planes" checked>
+            <span>Cut Planes</span>
+          </label>
+          <label class="layer-toggle">
+            <input type="checkbox" id="toggle-ruler" checked>
+            <span>Z-Ruler</span>
+          </label>
+          <label class="layer-toggle">
+            <input type="checkbox" id="toggle-wireframe">
+            <span>Wireframe</span>
+          </label>
+        </div>
+      </div>
+
+      <!-- Three.js Canvas Container -->
+      <div id="three-canvas"></div>
+
+      <!-- Bottom-Left HUD Landmark Info -->
+      <div class="viewport-hud">
+        <div class="hud-item">
+          <span style="color: #34d399; font-weight: 700;">● Z = 0.0 mm:</span>
+          <span>Proximal Tibial Plateau Joint Line (0% TTL)</span>
+        </div>
+        <div class="hud-item">
+          <span style="color: #38bdf8; font-weight: 700;">● Z = -TTL mm:</span>
+          <span>Distal Pilon / Malleolus Joint Line (100% TTL)</span>
+        </div>
+        <div class="hud-item">
+          <span style="color: #ef4444; font-weight: 700;">■ Red Volume:</span>
+          <span>Resected Bone Defect Void</span>
+        </div>
+        <div class="hud-item">
+          <span style="color: #06b6d4; font-weight: 700;">■ Cyan Plane:</span>
+          <span>Corticotomy Osteotomy Plane</span>
+        </div>
+      </div>
+
+      <!-- Bottom-Right Transport Distraction Osteogenesis Simulation Slider -->
+      <div id="transport-slider-hud" class="transport-slider-hud">
+        <div style="display: flex; justify-content: space-between; align-items: center;">
+          <span style="font-size: 11px; font-weight: 700; color: #38bdf8;">Bone Transport Simulation</span>
+          <span id="transport-offset-val" style="font-size: 11px; font-weight: 700; color: #fff;">0.0 mm</span>
+        </div>
+        <p style="font-size: 10px; color: var(--text-dim); line-height: 1.2;">
+          Drag to simulate transport segment distraction across the defect void
+        </p>
+        <input type="range" id="transport-offset-slider" class="range-slider" min="-120" max="120" step="1" value="0">
+      </div>
+    </section>
+  </main>
+
+  <!-- Global Spinner Overlay -->
+  <div id="loading-overlay" class="loading-overlay">
+    <div class="spinner"></div>
+    <div id="loading-text" class="loading-text">Processing...</div>
+  </div>
+
+  <!-- Main Application Script -->
+  <script src="/static/js/viewer3d.js"></script>
+  <script src="/static/js/app.js"></script>
+
+</body>
+</html>
