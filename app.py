@@ -104,7 +104,10 @@ def upload_stls():
 
     uploaded_files = request.files.getlist('files')
     if not uploaded_files or (len(uploaded_files) == 1 and uploaded_files[0].filename == ''):
-        uploaded_files = [request.files['file']]
+        if 'file' in request.files:
+            uploaded_files = [request.files['file']]
+        else:
+            uploaded_files = []
 
     results = []
     for f in uploaded_files:
@@ -265,6 +268,23 @@ def download_file(folder, filename):
     return send_file(file_path, as_attachment=as_attachment, download_name=filename, mimetype=mimetype)
 
 
+def open_browser_when_ready(port=5000):
+    import time
+    import urllib.request
+    import webbrowser
+    for _ in range(60):
+        time.sleep(0.3)
+        try:
+            with urllib.request.urlopen(f"http://127.0.0.1:{port}/api/status", timeout=0.5) as r:
+                if r.status == 200:
+                    webbrowser.open(f"http://127.0.0.1:{port}")
+                    break
+        except Exception:
+            pass
+
+
 if __name__ == '__main__':
+    import threading
+    threading.Thread(target=open_browser_when_ready, daemon=True).start()
     print("[*] Starting AAFACT 2.0 Server on http://127.0.0.1:5000")
     app.run(host='127.0.0.1', port=5000, debug=False)

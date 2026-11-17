@@ -9,26 +9,35 @@ echo ===================================================================
 set SCRIPT_DIR=%~dp0
 cd /d "%SCRIPT_DIR%"
 
-:: Step 1: Check Python installation
-where python >nul 2>&1
-if %ERRORLEVEL% neq 0 (
-    echo [ERROR] Python is not installed or not in PATH. Please install Python 3.10+
-    pause
-    exit /b 1
-)
-
-:: Step 2: Check or create virtual environment
+:: Step 1 & 2: Check or create virtual environment
 if not exist "%SCRIPT_DIR%venv\Scripts\python.exe" (
+    set SYS_PYTHON=
+    where python >nul 2>&1
+    if !ERRORLEVEL! equ 0 (
+        set SYS_PYTHON=python
+    ) else (
+        where py >nul 2>&1
+        if !ERRORLEVEL! equ 0 (
+            set SYS_PYTHON=py -3
+        )
+    )
+
+    if not defined SYS_PYTHON (
+        echo [ERROR] Python is not installed or not in PATH. Please install Python 3.10+
+        pause
+        exit /b 1
+    )
+
     echo [*] Virtual environment not found. Creating venv in %SCRIPT_DIR%venv...
-    python -m venv "%SCRIPT_DIR%venv"
-    if %ERRORLEVEL% neq 0 (
+    !SYS_PYTHON! -m venv "%SCRIPT_DIR%venv"
+    if !ERRORLEVEL! neq 0 (
         echo [ERROR] Failed to create virtual environment.
         pause
         exit /b 1
     )
     echo [*] Installing dependencies from requirements.txt...
     "%SCRIPT_DIR%venv\Scripts\pip" install -r "%SCRIPT_DIR%requirements.txt"
-    if %ERRORLEVEL% neq 0 (
+    if !ERRORLEVEL! neq 0 (
         echo [WARNING] One or more packages encountered issues during installation.
     )
 ) else (
@@ -50,7 +59,6 @@ echo ===================================================================
 echo [AAFACT 2.0] Starting Flask Server on http://127.0.0.1:5000 ...
 echo ===================================================================
 
-start "" http://127.0.0.1:5000
 "%SCRIPT_DIR%venv\Scripts\python.exe" "%SCRIPT_DIR%app.py"
 
 pause

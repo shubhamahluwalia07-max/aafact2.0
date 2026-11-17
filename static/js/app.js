@@ -119,11 +119,21 @@ document.addEventListener('DOMContentLoaded', () => {
       content.classList.toggle('active', idx + 1 === tabIndex);
     });
 
-    if (tabIndex === 2) {
+    if (tabIndex === 1) {
+      viewer.toggleLayer('segments', false);
+      viewer.toggleLayer('bone', true);
+      viewer.toggleLayer('planes', false);
+    } else if (tabIndex === 2) {
+      viewer.toggleLayer('segments', false);
+      viewer.toggleLayer('bone', true);
       viewer.toggleLayer('planes', true);
       updateCuttingPlanesAndInputs();
     } else if (tabIndex === 3) {
       viewer.toggleLayer('planes', false);
+      if (state.sliceData) {
+        viewer.toggleLayer('bone', false);
+        viewer.toggleLayer('segments', true);
+      }
     }
   }
 
@@ -192,6 +202,9 @@ document.addEventListener('DOMContentLoaded', () => {
       state.ttlMm = meta.ttl;
       els.readoutTtl.textContent = `${meta.ttl.toFixed(1)} mm`;
       viewer.updateRuler(meta.ttl);
+    }, (err) => {
+      showLoading(false);
+      console.error("Failed to load bone mesh:", err);
     });
   }
 
@@ -627,6 +640,8 @@ document.addEventListener('DOMContentLoaded', () => {
   els.btnStartNewCase.addEventListener('click', () => {
     switchTab(1);
     els.transportSliderHud.classList.remove('visible');
+    els.transportOffsetSlider.value = 0;
+    els.transportOffsetVal.textContent = "0.0 mm";
     viewer.setTransportDisplacement(0.0);
   });
 

@@ -55,7 +55,8 @@ class BoneViewer3D {
     const height = this.container.clientHeight || 600;
 
     this.camera = new THREE.PerspectiveCamera(45, width / height, 1, 5000);
-    this.camera.position.set(220, 260, 180);
+    this.camera.up.set(0, 0, 1);
+    this.camera.position.set(240, 280, -180);
 
     this.renderer = new THREE.WebGLRenderer({ antialias: true, alpha: false });
     this.renderer.setSize(width, height);
@@ -72,9 +73,10 @@ class BoneViewer3D {
     this.scene.add(this.rulerGroup);
     this.scene.add(this.segmentsGroup);
 
-    // Subtle Ground Grid
+    // Subtle Ground Grid (Oriented perpendicular to Z mechanical axis)
     const grid = new THREE.GridHelper(500, 25, 0x1e293b, 0x0f172a);
-    grid.position.y = -200;
+    grid.rotation.x = Math.PI / 2;
+    grid.position.set(0, 0, -420);
     this.scene.add(grid);
   }
 
@@ -129,7 +131,7 @@ class BoneViewer3D {
   /* ----------------------------------------------------
      LOAD SINGLE BONE MESH (Raw or Aligned)
   ---------------------------------------------------- */
-  loadBoneMesh(meshUrl, onLoadedCallback) {
+  loadBoneMesh(meshUrl, onLoadedCallback, onErrorCallback) {
     // Clear previous
     this.clearMeshGroup(this.boneGroup);
     this.clearMeshGroup(this.segmentsGroup);
@@ -163,10 +165,12 @@ class BoneViewer3D {
         const zMax = bbox.max.z;
         const calculatedTtl = Math.abs(zMax - zMin);
 
-        // Center orbit target around mid-shaft
+        // Center orbit target around mid-shaft, oriented with longitudinal Z-axis upright
         const midZ = (zMax + zMin) / 2.0;
+        this.camera.up.set(0, 0, 1);
         this.controls.target.set(0, 0, midZ);
-        this.camera.position.set(160, 220, midZ + 60);
+        this.camera.position.set(220, 260, midZ);
+        this.controls.update();
 
         if (onLoadedCallback) {
           onLoadedCallback({
@@ -180,6 +184,7 @@ class BoneViewer3D {
       undefined,
       (error) => {
         console.error("Error loading STL:", error);
+        if (onErrorCallback) onErrorCallback(error);
       }
     );
   }
@@ -187,7 +192,7 @@ class BoneViewer3D {
   /* ----------------------------------------------------
      LOAD 3 CUT SEGMENTS (Proximal, Transport, Distal)
   ---------------------------------------------------- */
-  loadSegmentedMeshes(urls, onLoadedCallback) {
+  loadSegmentedMeshes(urls, onLoadedCallback, onErrorCallback) {
     this.clearMeshGroup(this.segmentsGroup);
     this.boneGroup.visible = false;
     this.segmentsGroup.visible = true;
@@ -233,6 +238,9 @@ class BoneViewer3D {
         if (loadedCount === keys.length && onLoadedCallback) {
           onLoadedCallback();
         }
+      }, undefined, (error) => {
+        console.error(`Error loading segment ${key}:`, error);
+        if (onErrorCallback) onErrorCallback(error);
       });
     });
   }
@@ -438,14 +446,24 @@ class BoneViewer3D {
   }
 
   clearMeshGroup(group) {
-    while (group.children.length > 0) {
-      const obj = group.children[0];
+    const disposeRecursive = (obj) => {
+      if (!obj) return;
+      if (obj.children) {
+        while (obj.children.length > 0) {
+          disposeRecursive(obj.children[0]);
+          obj.remove(obj.children[0]);
+        }
+      }
       if (obj.geometry) obj.geometry.dispose();
       if (obj.material) {
         if (Array.isArray(obj.material)) obj.material.forEach((m) => m.dispose());
         else obj.material.dispose();
       }
-      group.remove(obj);
+    };
+    while (group.children.length > 0) {
+      const child = group.children[0];
+      disposeRecursive(child);
+      group.remove(child);
     }
   }
 }

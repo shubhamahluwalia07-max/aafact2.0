@@ -15,21 +15,21 @@ if exist "%SCRIPT_DIR%venv\Scripts\python.exe" (
 
 %PYTHON_CMD% "%SCRIPT_DIR%check_matlab_runtime.py" --check-only >nul 2>&1
 if %ERRORLEVEL% equ 0 (
-    echo [OK] MATLAB Runtime R2023a (v9.14) is already installed.
+    echo [OK] MATLAB Runtime R2023a [v9.14] is already installed.
     exit /b 0
 )
 
-echo [!] MATLAB Runtime R2023a (v9.14) was NOT found in the Windows Registry.
-set INSTALLER="%SCRIPT_DIR%MATLAB_Runtime_R2023a_Update_8_win64\setup.exe"
+echo [!] MATLAB Runtime R2023a [v9.14] was NOT found in the Windows Registry.
+set "INSTALLER=%SCRIPT_DIR%MATLAB_Runtime_R2023a_Update_8_win64\setup.exe"
 
-if exist %INSTALLER% (
+if exist "%INSTALLER%" (
     echo [*] Found local installer at: %INSTALLER%
     echo [*] Starting silent installation of MATLAB Runtime R2023a...
-    echo [*] Command: %INSTALLER% -mode silent -agreeToLicense yes
+    echo [*] Command: "%INSTALLER%" -mode silent -agreeToLicense yes
     echo [*] Note: This may take several minutes. Please do not close this window.
     
-    %INSTALLER% -mode silent -agreeToLicense yes
-    set RET=%ERRORLEVEL%
+    "%INSTALLER%" -mode silent -agreeToLicense yes
+    set RET=!ERRORLEVEL!
     
     if !RET! equ 0 (
         echo [SUCCESS] MATLAB Runtime R2023a installed successfully.
