@@ -1,0 +1,10 @@
+services:
+  - type: web
+    name: aafact-tool
+    env: docker
+    plan: free
+    region: oregon
+    healthCheckPath: /api/status
+    envVars:
+      - key: PORT
+        value: 10000

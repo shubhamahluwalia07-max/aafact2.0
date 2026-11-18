@@ -1,9 +1,6 @@
 flask
 numpy
 scipy
-trimesh[easy]
+trimesh
 manifold3d
-rtree
-networkx
-pandas
-openpyxl
+gunicorn>=21.2.0

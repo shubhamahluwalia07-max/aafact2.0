@@ -1,0 +1,33 @@
+# Large installer archive and local runtime folder (Crucial: prevents multi-gigabyte build context upload)
+MATLAB_Runtime_*/
+*.zip
+*.tar.gz
+*.iso
+
+# Python virtual environment & cache
+venv/
+env/
+.env
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+
+# Git repository
+.git/
+.gitignore
+
+# Uploads and temporary outputs (preserve directory structure via .gitkeep)
+uploads/*
+!uploads/.gitkeep
+outputs/aligned/*
+!outputs/aligned/.gitkeep
+outputs/cut_segments/*
+!outputs/cut_segments/.gitkeep
+
+# IDE and OS
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
+*.log

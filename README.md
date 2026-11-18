@@ -1,3 +1,12 @@
+---
+title: AAFACT 2.0 - Bone Alignment & Corticotomy Planning
+emoji: 🦴
+colorFrom: blue
+colorTo: cyan
+sdk: docker
+app_port: 7860
+---
+
 # AAFACT 2.0: Bone Alignment & Corticotomy Planning System
 
 Production-ready clinical orthopedic planning application for automated anatomical bone alignment, Tibial Plateau Z-origin registration, defect resection, and corticotomy planning with an interactive Three.js 3D viewport.
@@ -85,6 +94,28 @@ venv\Scripts\pip install -r requirements.txt
 venv\Scripts\python check_matlab_runtime.py
 venv\Scripts\python app.py
 ```
+
+---
+
+## 🚀 Cloud Deployment (Render & Railway)
+
+This repository includes container configurations (`Dockerfile`, `.dockerignore`, `render.yaml`, `railway.json`, and `Procfile`) for instant 1-click cloud deployment.
+
+### Option 1: Render.com (1-Click Blueprint)
+1. Push your changes to GitHub: `git push origin main`
+2. Log in to [Render Dashboard](https://dashboard.render.com).
+3. Click **New +** -> **Blueprint**.
+4. Select your repository `aafact2.0`.
+5. Render detects [render.yaml](file:///e:/Custom%20Apps/aafact_tool_2.0/render.yaml) and automatically builds the Docker container.
+6. Your web application is live at `https://aafact-tool.onrender.com`.
+
+### Option 2: Railway.app (1-Click Docker)
+1. Push your changes to GitHub: `git push origin main`
+2. Log in to [Railway Dashboard](https://railway.app/dashboard).
+3. Click **New Project** -> **Deploy from GitHub repo**.
+4. Select `aafact2.0`.
+5. Railway detects [Dockerfile](file:///e:/Custom%20Apps/aafact_tool_2.0/Dockerfile) and [railway.json](file:///e:/Custom%20Apps/aafact_tool_2.0/railway.json) automatically.
+6. Under Service Settings -> Networking, click **Generate Domain** to get your public URL.
 
 ---
 

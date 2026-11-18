@@ -284,7 +284,10 @@ def open_browser_when_ready(port=5000):
 
 
 if __name__ == '__main__':
-    import threading
-    threading.Thread(target=open_browser_when_ready, daemon=True).start()
-    print("[*] Starting AAFACT 2.0 Server on http://127.0.0.1:5000")
-    app.run(host='127.0.0.1', port=5000, debug=False)
+    port = int(os.environ.get("PORT", 5000))
+    is_cloud = bool(os.environ.get("SPACE_ID") or os.environ.get("RENDER") or os.environ.get("RAILWAY_ENVIRONMENT") or os.environ.get("PORT"))
+    if not is_cloud:
+        import threading
+        threading.Thread(target=lambda: open_browser_when_ready(port), daemon=True).start()
+    print(f"[*] Starting AAFACT 2.0 Server on 0.0.0.0:{port}")
+    app.run(host='0.0.0.0', port=port, debug=False)
