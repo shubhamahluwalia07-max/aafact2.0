@@ -68,6 +68,11 @@ def list_samples():
     return jsonify({'samples': samples})
 
 
+@app.route('/sample_data/<path:filename>')
+def serve_sample_data(filename):
+    return send_from_directory(SAMPLE_DIR, filename)
+
+
 @app.route('/api/samples/load', methods=['POST'])
 def load_sample():
     data = request.get_json() or {}

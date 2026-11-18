@@ -14,6 +14,8 @@ document.addEventListener('DOMContentLoaded', () => {
     laterality: "Right",
     anatomy: "Tibia",
     isStandard: true,
+    rawGeometry: null,
+    alignedGeometry: null,
     
     // Alignment Results
     alignedFilename: null,
@@ -151,6 +153,7 @@ document.addEventListener('DOMContentLoaded', () => {
   async function checkSystemStatus() {
     try {
       const res = await fetch('/api/status');
+      if (!res.ok) throw new Error("HTTP " + res.status);
       const data = await res.json();
       if (data.matlab_runtime && data.matlab_runtime.installed) {
         els.matlabStatusDot.className = 'status-dot active';
@@ -160,7 +163,9 @@ document.addEventListener('DOMContentLoaded', () => {
         els.matlabStatusText.textContent = `Native Geometry Engine (Active)`;
       }
     } catch (e) {
-      console.warn("Status check warning:", e);
+      console.log("Static mode active (Client-Side 3D Engine):", e);
+      els.matlabStatusDot.className = 'status-dot active';
+      els.matlabStatusText.textContent = `Client-Side 3D Engine (Ready)`;
     }
   }
   checkSystemStatus();
@@ -168,12 +173,15 @@ document.addEventListener('DOMContentLoaded', () => {
   /* ----------------------------------------------------
      FILE UPLOAD & SAMPLE LOADING
   ---------------------------------------------------- */
-  function populateMetadata(parsed) {
+  function populateMetadata(parsed, geometry = null) {
     state.currentFile = parsed.filename;
     state.patientName = parsed.patient_name || "Ashok";
     state.laterality = parsed.laterality || "Right";
     state.anatomy = parsed.anatomy || "Tibia";
     state.isStandard = parsed.is_standard;
+    if (geometry) {
+      state.rawGeometry = geometry;
+    }
 
     els.inputPatientName.value = state.patientName;
     els.selectAnatomy.value = state.anatomy;
@@ -197,7 +205,8 @@ document.addEventListener('DOMContentLoaded', () => {
 
     // Load mesh into 3D viewer
     showLoading(true, "Loading 3D Mesh...");
-    viewer.loadBoneMesh(parsed.mesh_url, (meta) => {
+    const target = geometry || parsed.mesh_url;
+    viewer.loadBoneMesh(target, (meta) => {
       showLoading(false);
       state.ttlMm = meta.ttl;
       els.readoutTtl.textContent = `${meta.ttl.toFixed(1)} mm`;
@@ -241,24 +250,36 @@ document.addEventListener('DOMContentLoaded', () => {
   });
 
   async function handleFilesUpload(files) {
-    const formData = new FormData();
-    for (let i = 0; i < files.length; i++) {
-      formData.append('files', files[i]);
+    if (!files || files.length === 0) return;
+    const file = files[0];
+    if (!file.name.toLowerCase().endsWith('.stl')) {
+      alert("Please upload an STL 3D mesh (.stl)");
+      return;
     }
-    showLoading(true, "Uploading and parsing STL files...");
-    try {
-      const res = await fetch('/api/upload', { method: 'POST', body: formData });
-      const data = await res.json();
-      showLoading(false);
-      if (data.success && data.uploaded.length > 0) {
-        populateMetadata(data.uploaded[0]);
-      } else {
-        alert("Upload error: " + (data.error || "No valid STL files"));
+
+    showLoading(true, `Reading ${file.name}...`);
+    // Direct client FileReader: instant loading, zero latency, zero server required
+    const reader = new FileReader();
+    reader.onload = function (e) {
+      try {
+        const buffer = e.target.result;
+        const geometry = viewer.stlLoader.parse(buffer);
+        const parsed = ClientEngine.parseBoneFilename(file.name);
+        parsed.filename = file.name;
+        parsed.size_kb = Math.round((file.size / 1024) * 10) / 10;
+        showLoading(false);
+        populateMetadata(parsed, geometry);
+      } catch (err) {
+        showLoading(false);
+        console.error("Client parsing error:", err);
+        alert("Could not parse 3D STL mesh: " + err.message);
       }
-    } catch (err) {
+    };
+    reader.onerror = function () {
       showLoading(false);
-      alert("Network error uploading files: " + err);
-    }
+      alert("Failed to read file.");
+    };
+    reader.readAsArrayBuffer(file);
   }
 
   // Quick load samples
@@ -270,14 +291,33 @@ document.addEventListener('DOMContentLoaded', () => {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ filename })
       });
-      const data = await res.json();
-      showLoading(false);
-      if (data.success) {
-        populateMetadata(data);
+      if (res.ok) {
+        const data = await res.json();
+        if (data.success) {
+          showLoading(false);
+          populateMetadata(data);
+          return;
+        }
       }
     } catch (e) {
+      console.log("Backend sample load unavailable, falling back to static fetch:", e);
+    }
+
+    // Static fallback for Vercel / Hugging Face Static
+    try {
+      const url = `sample_data/${filename}`;
+      const res = await fetch(url);
+      if (!res.ok) throw new Error("Could not fetch " + url);
+      const buffer = await res.arrayBuffer();
+      const geometry = viewer.stlLoader.parse(buffer);
+      const parsed = ClientEngine.parseBoneFilename(filename);
+      parsed.filename = filename;
+      parsed.size_kb = Math.round((buffer.byteLength / 1024) * 10) / 10;
       showLoading(false);
-      alert("Error loading sample: " + e);
+      populateMetadata(parsed, geometry);
+    } catch (err) {
+      showLoading(false);
+      alert("Error loading sample file: " + err.message);
     }
   }
 
@@ -288,51 +328,92 @@ document.addEventListener('DOMContentLoaded', () => {
      MODULE 1: ALIGNMENT & Z-ORIGIN REGISTRATION
   ---------------------------------------------------- */
   els.btnRunAlignment.addEventListener('click', async () => {
-    if (!state.currentFile) return;
+    if (!state.currentFile && !state.rawGeometry && !viewer.currentMesh) return;
 
     showLoading(true, "Executing AAFACT Alignment & Tibial Plateau Z-Origin Registration...");
-    try {
-      const res = await fetch('/api/align', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          filename: state.currentFile,
-          patient_name: state.patientName,
-          laterality: state.laterality,
-          anatomy: state.anatomy
-        })
-      });
-      const resp = await res.json();
-      showLoading(false);
 
-      if (resp.success) {
-        const d = resp.data;
-        state.alignedFilename = d.aligned_filename;
-        state.alignedMeshUrl = d.mesh_url;
-        state.ttlMm = d.ttl_mm;
-
-        // Update readouts
-        els.readoutTtl.textContent = `${d.ttl_mm.toFixed(1)} mm`;
-        els.readoutZPlateau.textContent = `${d.proximal_z_origin.toFixed(1)} mm`;
-        els.readoutZDistal.textContent = `${d.distal_z_end.toFixed(1)} mm`;
-        els.readoutVolume.textContent = d.volume_cm3 ? `${d.volume_cm3} cm³` : "Calculated";
-
-        els.alignmentCard.style.display = 'flex';
-        els.btnDownloadAligned.href = d.download_url;
-        els.btnDownloadAligned.style.display = 'inline-flex';
-        els.btnProceedModule2.style.display = 'inline-flex';
-        els.tabBtn2.classList.remove('disabled');
-
-        // Re-load aligned mesh in viewer & update ruler
-        viewer.loadBoneMesh(d.mesh_url, () => {
-          viewer.updateRuler(d.ttl_mm);
+    // If backend is active and rawGeometry is not solely client-side, try API first
+    if (!state.rawGeometry && state.currentFile) {
+      try {
+        const res = await fetch('/api/align', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            filename: state.currentFile,
+            patient_name: state.patientName,
+            laterality: state.laterality,
+            anatomy: state.anatomy
+          })
         });
-      } else {
-        alert("Alignment failed: " + resp.error);
+        if (res.ok) {
+          const resp = await res.json();
+          if (resp.success) {
+            const d = resp.data;
+            state.alignedFilename = d.aligned_filename;
+            state.alignedMeshUrl = d.mesh_url;
+            state.ttlMm = d.ttl_mm;
+
+            els.readoutTtl.textContent = `${d.ttl_mm.toFixed(1)} mm`;
+            els.readoutZPlateau.textContent = `${d.proximal_z_origin.toFixed(1)} mm`;
+            els.readoutZDistal.textContent = `${d.distal_z_end.toFixed(1)} mm`;
+            els.readoutVolume.textContent = d.volume_cm3 ? `${d.volume_cm3} cm³` : "Calculated";
+
+            els.alignmentCard.style.display = 'flex';
+            els.btnDownloadAligned.href = d.download_url;
+            els.btnDownloadAligned.style.display = 'inline-flex';
+            els.btnProceedModule2.style.display = 'inline-flex';
+            els.tabBtn2.classList.remove('disabled');
+
+            viewer.loadBoneMesh(d.mesh_url, () => {
+              viewer.updateRuler(d.ttl_mm);
+            });
+            showLoading(false);
+            return;
+          }
+        }
+      } catch (e) {
+        console.log("Backend alignment unavailable, running client engine:", e);
       }
+    }
+
+    // Client-Side 3D Vertex PCA Alignment Engine
+    try {
+      const sourceGeo = state.rawGeometry || (viewer.currentMesh ? viewer.currentMesh.geometry : null);
+      if (!sourceGeo) throw new Error("No 3D geometry loaded");
+
+      const res = ClientEngine.alignBoneMesh(sourceGeo, state.laterality, state.anatomy);
+      state.alignedGeometry = res.geometry;
+      state.alignedFilename = `${state.patientName}_${state.laterality}_${state.anatomy}_Aligned.stl`;
+      state.ttlMm = res.ttl_mm;
+
+      // Create binary STL blob for download
+      const stlBytes = ClientEngine.createBinarySTL(res.geometry.attributes.position.array);
+      const stlBlob = new Blob([stlBytes], { type: 'model/stl' });
+      const stlUrl = URL.createObjectURL(stlBlob);
+      state.alignedMeshUrl = stlUrl;
+
+      const m = ClientEngine.computeMetrics(res.geometry.attributes.position.array, res.ttl_mm);
+
+      // Update readouts
+      els.readoutTtl.textContent = `${res.ttl_mm.toFixed(1)} mm`;
+      els.readoutZPlateau.textContent = `${res.proximal_z_origin.toFixed(1)} mm`;
+      els.readoutZDistal.textContent = `${res.distal_z_end.toFixed(1)} mm`;
+      els.readoutVolume.textContent = `${m.volume_cm3.toFixed(1)} cm³`;
+
+      els.alignmentCard.style.display = 'flex';
+      els.btnDownloadAligned.href = stlUrl;
+      els.btnDownloadAligned.download = state.alignedFilename;
+      els.btnDownloadAligned.style.display = 'inline-flex';
+      els.btnProceedModule2.style.display = 'inline-flex';
+      els.tabBtn2.classList.remove('disabled');
+
+      viewer.loadBoneMesh(res.geometry, () => {
+        viewer.updateRuler(res.ttl_mm);
+      });
+      showLoading(false);
     } catch (err) {
       showLoading(false);
-      alert("Network error during alignment: " + err);
+      alert("Alignment error: " + err.message);
     }
   });
 
@@ -515,48 +596,80 @@ document.addEventListener('DOMContentLoaded', () => {
      MODULE 2: EXECUTE WATERTIGHT CORTICOTOMY
   ---------------------------------------------------- */
   els.btnRunSlicing.addEventListener('click', async () => {
-    if (!state.alignedFilename) {
+    if (!state.alignedFilename && !state.alignedGeometry) {
       alert("Please execute AAFACT alignment in Module 1 first.");
       return;
     }
 
     showLoading(true, "Executing Watertight Corticotomy & Manifold Planar Capping...");
-    try {
-      const res = await fetch('/api/slice', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          aligned_filename: state.alignedFilename,
-          ttl_mm: state.ttlMm,
-          defect_start_pct: state.defectStartPct,
-          defect_length_pct: state.defectLengthPct,
-          corticotomy_pct: state.corticotomyPct,
-          saw_kerf_mm: state.sawKerfMm
-        })
-      });
-      const resp = await res.json();
-      showLoading(false);
 
-      if (resp.success) {
-        state.sliceData = resp.data;
-        renderSlicingResults(resp.data);
-        switchTab(3);
-
-        // Load 3D segmented meshes
-        const meshUrls = {
-          proximal: resp.data.segments.proximal.mesh_url,
-          transport: resp.data.segments.transport.mesh_url,
-          distal: resp.data.segments.distal.mesh_url
-        };
-        viewer.loadSegmentedMeshes(meshUrls, () => {
-          els.transportSliderHud.classList.add('visible');
+    // If backend is active and rawGeometry is not strictly client-side, try API
+    if (!state.alignedGeometry && state.alignedFilename) {
+      try {
+        const res = await fetch('/api/slice', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            aligned_filename: state.alignedFilename,
+            ttl_mm: state.ttlMm,
+            defect_start_pct: state.defectStartPct,
+            defect_length_pct: state.defectLengthPct,
+            corticotomy_pct: state.corticotomyPct,
+            saw_kerf_mm: state.sawKerfMm
+          })
         });
-      } else {
-        alert("Slicing failed: " + resp.error);
+        if (res.ok) {
+          const resp = await res.json();
+          if (resp.success) {
+            showLoading(false);
+            state.sliceData = resp.data;
+            renderSlicingResults(resp.data);
+            switchTab(3);
+
+            // Load 3D segmented meshes
+            const meshUrls = {
+              proximal: resp.data.segments.proximal.mesh_url,
+              transport: resp.data.segments.transport.mesh_url,
+              distal: resp.data.segments.distal.mesh_url
+            };
+            viewer.loadSegmentedMeshes(meshUrls, () => {
+              els.transportSliderHud.classList.add('visible');
+            });
+            return;
+          }
+        }
+      } catch (err) {
+        console.log("Backend slicing unavailable, falling back to client-side engine:", err);
       }
+    }
+
+    // Client-Side Watertight Corticotomy Engine
+    try {
+      const geo = state.alignedGeometry || (viewer.currentMesh ? viewer.currentMesh.geometry : null);
+      if (!geo) throw new Error("No aligned 3D geometry found");
+
+      const sliceRes = ClientEngine.executeCorticotomySlicing(
+        geo,
+        state.ttlMm,
+        state.defectStartPct,
+        state.defectLengthPct,
+        state.corticotomyPct,
+        state.sawKerfMm,
+        state.alignedFilename || "bone_aligned.stl"
+      );
+
+      showLoading(false);
+      state.sliceData = sliceRes;
+      renderSlicingResults(sliceRes);
+      switchTab(3);
+
+      viewer.loadSegmentedMeshes(sliceRes.geometries, () => {
+        els.transportSliderHud.classList.add('visible');
+      });
     } catch (err) {
       showLoading(false);
-      alert("Network error executing slicing: " + err);
+      console.error("Client slicing failed:", err);
+      alert("Slicing error: " + err.message);
     }
   });
 

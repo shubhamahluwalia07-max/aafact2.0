@@ -131,55 +131,64 @@ class BoneViewer3D {
   /* ----------------------------------------------------
      LOAD SINGLE BONE MESH (Raw or Aligned)
   ---------------------------------------------------- */
-  loadBoneMesh(meshUrl, onLoadedCallback, onErrorCallback) {
+  loadBoneMesh(meshUrlOrGeometry, onLoadedCallback, onErrorCallback) {
     // Clear previous
     this.clearMeshGroup(this.boneGroup);
     this.clearMeshGroup(this.segmentsGroup);
     this.segmentsGroup.visible = false;
     this.boneGroup.visible = true;
 
-    this.stlLoader.load(
-      meshUrl,
-      (geometry) => {
-        geometry.computeVertexNormals();
+    const setupMesh = (geometry) => {
+      geometry.computeVertexNormals();
 
-        // Anatomical bone material
-        const material = new THREE.MeshStandardMaterial({
-          color: 0xe2e8f0,
-          roughness: 0.35,
-          metalness: 0.1,
-          wireframe: this.visibleLayers.wireframe,
-          side: THREE.DoubleSide
+      // Anatomical bone material
+      const material = new THREE.MeshStandardMaterial({
+        color: 0xe2e8f0,
+        roughness: 0.35,
+        metalness: 0.1,
+        wireframe: this.visibleLayers.wireframe,
+        side: THREE.DoubleSide
+      });
+
+      const mesh = new THREE.Mesh(geometry, material);
+      mesh.castShadow = true;
+      mesh.receiveShadow = true;
+      this.currentMesh = mesh;
+      this.boneGroup.add(mesh);
+
+      // Calculate bounding box and center camera
+      geometry.computeBoundingBox();
+      const bbox = geometry.boundingBox;
+      const zMin = bbox.min.z;
+      const zMax = bbox.max.z;
+      const calculatedTtl = Math.abs(zMax - zMin);
+
+      // Center orbit target around mid-shaft, oriented with longitudinal Z-axis upright
+      const midZ = (zMax + zMin) / 2.0;
+      this.camera.up.set(0, 0, 1);
+      this.controls.target.set(0, 0, midZ);
+      this.camera.position.set(220, 260, midZ);
+      this.controls.update();
+
+      if (onLoadedCallback) {
+        onLoadedCallback({
+          zMin,
+          zMax,
+          ttl: calculatedTtl,
+          bbox
         });
+      }
+    };
 
-        const mesh = new THREE.Mesh(geometry, material);
-        mesh.castShadow = true;
-        mesh.receiveShadow = true;
-        this.currentMesh = mesh;
-        this.boneGroup.add(mesh);
+    if (meshUrlOrGeometry instanceof THREE.BufferGeometry) {
+      setupMesh(meshUrlOrGeometry);
+      return;
+    }
 
-        // Calculate bounding box and center camera
-        geometry.computeBoundingBox();
-        const bbox = geometry.boundingBox;
-        const zMin = bbox.min.z;
-        const zMax = bbox.max.z;
-        const calculatedTtl = Math.abs(zMax - zMin);
-
-        // Center orbit target around mid-shaft, oriented with longitudinal Z-axis upright
-        const midZ = (zMax + zMin) / 2.0;
-        this.camera.up.set(0, 0, 1);
-        this.controls.target.set(0, 0, midZ);
-        this.camera.position.set(220, 260, midZ);
-        this.controls.update();
-
-        if (onLoadedCallback) {
-          onLoadedCallback({
-            zMin,
-            zMax,
-            ttl: calculatedTtl,
-            bbox
-          });
-        }
+    this.stlLoader.load(
+      meshUrlOrGeometry,
+      (geometry) => {
+        setupMesh(geometry);
       },
       undefined,
       (error) => {
@@ -192,7 +201,7 @@ class BoneViewer3D {
   /* ----------------------------------------------------
      LOAD 3 CUT SEGMENTS (Proximal, Transport, Distal)
   ---------------------------------------------------- */
-  loadSegmentedMeshes(urls, onLoadedCallback, onErrorCallback) {
+  loadSegmentedMeshes(urlsOrGeometries, onLoadedCallback, onErrorCallback) {
     this.clearMeshGroup(this.segmentsGroup);
     this.boneGroup.visible = false;
     this.segmentsGroup.visible = true;
@@ -222,11 +231,25 @@ class BoneViewer3D {
       })
     };
 
-    let loadedCount = 0;
     const keys = ['proximal', 'transport', 'distal'];
 
+    if (urlsOrGeometries.proximal instanceof THREE.BufferGeometry) {
+      keys.forEach((key) => {
+        const geometry = urlsOrGeometries[key];
+        geometry.computeVertexNormals();
+        const mesh = new THREE.Mesh(geometry, materials[key]);
+        mesh.castShadow = true;
+        mesh.receiveShadow = true;
+        this.segments[key] = mesh;
+        this.segmentsGroup.add(mesh);
+      });
+      if (onLoadedCallback) onLoadedCallback();
+      return;
+    }
+
+    let loadedCount = 0;
     keys.forEach((key) => {
-      this.stlLoader.load(urls[key], (geometry) => {
+      this.stlLoader.load(urlsOrGeometries[key], (geometry) => {
         geometry.computeVertexNormals();
         const mesh = new THREE.Mesh(geometry, materials[key]);
         mesh.castShadow = true;
